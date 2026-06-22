@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Left key line -->
+    <path
+        android:fillColor="#00FFE0"
+        android:pathData="M 32,35 L 32,75 C 32,77 34,79 36,79 L 40,79 C 42,79 44,77 44,75 L 44,35 Z" />
+
+    <!-- Center key line -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 48,32 L 48,76 C 48,78 50,80 52,80 L 56,80 C 58,80 60,78 60,76 L 60,32 Z" />
+
+    <!-- Right key line -->
+    <path
+        android:fillColor="#8E2DE2"
+        android:pathData="M 64,35 L 64,75 C 64,77 66,79 68,79 L 72,79 C 74,79 76,77 76,75 L 76,35 Z" />
+
+    <!-- Glowing Music Note icon floating majestically over the keys -->
+    <path
+        android:fillColor="#00FFE0"
+        android:pathData="M44,48 L44,28 L64,24 L64,44 C62,42 58,42 56,44 C53,46 52,50 54,53 C56,56 60,57 63,55 C66,54 67,50 67,46 L67,27 L47,31 L47,48 C45,46 41,46 39,48 C36,50 35,54 37,57 C39,60 43,61 46,59 C49,58 50,54 50,50 Z" />
+</vector>

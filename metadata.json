@@ -1,0 +1,6 @@
+{
+  "name": "KeySync Studio",
+  "description": "Interactive, real-time piano practice application with real-time audio pitch recognition and progressive song tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
