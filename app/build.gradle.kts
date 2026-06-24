@@ -6,6 +6,20 @@ plugins {
   alias(libs.plugins.secrets)
 }
 
+// Automatically recreate or update .env from system environment variables
+val envFile = file("${project.rootDir}/.env")
+val geminiKey = System.getenv("GEMINI_API_KEY") ?: "MY_GEMINI_API_KEY"
+val firebaseKey = System.getenv("FIREBASE_API_KEY") ?: "your_firebase_api_key"
+val firebaseProjectId = System.getenv("FIREBASE_PROJECT_ID") ?: "your_firebase_project_id"
+val firebaseAppId = System.getenv("FIREBASE_APP_ID") ?: "your_firebase_app_id"
+
+envFile.writeText("""
+    GEMINI_API_KEY=$geminiKey
+    FIREBASE_API_KEY=$firebaseKey
+    FIREBASE_PROJECT_ID=$firebaseProjectId
+    FIREBASE_APP_ID=$firebaseAppId
+""".trimIndent())
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

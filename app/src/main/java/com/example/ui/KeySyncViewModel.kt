@@ -58,8 +58,20 @@ class KeySyncViewModel(application: Application) : AndroidViewModel(application)
     private val _customSongs = MutableStateFlow<List<Song>>(emptyList())
     val customSongs = _customSongs.asStateFlow()
 
+    private val _aiAnalyzing = MutableStateFlow(false)
+    val aiAnalyzing = _aiAnalyzing.asStateFlow()
+
     private val _favoriteSongIds = MutableStateFlow<List<String>>(emptyList())
     val favoriteSongIds = _favoriteSongIds.asStateFlow()
+
+    private val sharedPrefs = application.getSharedPreferences("keysync_prefs", android.content.Context.MODE_PRIVATE)
+    private val _customApiKey = MutableStateFlow(sharedPrefs.getString("custom_api_key", "") ?: "")
+    val customApiKey = _customApiKey.asStateFlow()
+
+    fun saveCustomApiKey(key: String) {
+        sharedPrefs.edit().putString("custom_api_key", key).apply()
+        _customApiKey.value = key
+    }
 
     init {
         FirebaseService.init(application)
@@ -221,6 +233,87 @@ class KeySyncViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("KeySyncViewModel", "Error adding custom song: ${e.message}", e)
+            }
+        }
+    }
+
+    fun importSheetMusic(bitmap: android.graphics.Bitmap, onSuccess: (com.example.api.AnalyzedSongResult) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _aiAnalyzing.value = true
+            try {
+                val keyToUse = _customApiKey.value.trim().ifBlank { null }
+                val result = com.example.api.GeminiService.analyzeSheetMusic(bitmap, keyToUse)
+                if (result != null) {
+                    onSuccess(result)
+                } else {
+                    onError("Failed to analyze sheet music. Please check your internet connection, confirm that your API key is configured correctly in the Secrets panel, or try another image.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("KeySyncViewModel", "Error importing sheet music: ${e.message}", e)
+                onError("Error: ${e.message}")
+            } finally {
+                _aiAnalyzing.value = false
+            }
+        }
+    }
+
+    fun importMidiFile(inputStream: java.io.InputStream, fileName: String, onSuccess: (com.example.api.AnalyzedSongResult) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _aiAnalyzing.value = true
+            try {
+                val result = com.example.midi.MidiFileParser.parseMidi(inputStream, fileName)
+                if (result != null) {
+                    onSuccess(result)
+                } else {
+                    onError("Failed to parse MIDI file. Ensure it is a valid format 0 or format 1 MIDI file and has playable note events.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("KeySyncViewModel", "Error parsing MIDI file: ${e.message}", e)
+                onError("Error: ${e.message}")
+            } finally {
+                _aiAnalyzing.value = false
+            }
+        }
+    }
+
+    fun addCustomSongWithNotes(
+        title: String,
+        artist: String,
+        difficulty: String,
+        description: String,
+        notes: List<com.example.api.AnalyzedNote>
+    ) {
+        viewModelScope.launch {
+            try {
+                if (notes.isEmpty()) return@launch
+
+                val songNotes = notes.map { note ->
+                    SongNote(
+                        pitch = note.pitch,
+                        lyric = note.lyric,
+                        frequency = getFrequencyForPitch(note.pitch)
+                    )
+                }
+
+                val customSong = Song(
+                    id = "custom_" + System.currentTimeMillis(),
+                    title = title,
+                    artist = artist.ifEmpty { "Traditional" },
+                    difficulty = difficulty,
+                    description = description.ifEmpty { "Transcribed from sheet music image with Gemini AI." },
+                    notes = songNotes
+                )
+
+                if (FirebaseService.isFirebaseAvailable.value && FirebaseService.currentFirebaseUser.value != null) {
+                    FirebaseService.saveCustomSongToFirestore(customSong)
+                    refreshFirestoreCustomSongs()
+                } else {
+                    val currentList = _customSongs.value.toMutableList()
+                    currentList.add(customSong)
+                    _customSongs.value = currentList
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("KeySyncViewModel", "Error adding custom song with notes: ${e.message}", e)
             }
         }
     }
@@ -523,6 +616,8 @@ class KeySyncViewModel(application: Application) : AndroidViewModel(application)
     private val playbackPlayer = AudioPlaybackPlayer()
     private val _playingSessionId = MutableStateFlow<Int?>(null)
     val playingSessionId = _playingSessionId.asStateFlow()
+
+
 
     private var detectionJob: Job? = null
     private var lastMatchedTime = 0L

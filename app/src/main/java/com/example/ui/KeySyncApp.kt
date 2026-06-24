@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -743,9 +744,10 @@ fun DashboardScreen(
 
     if (showCreateSongDialog) {
         CreateSongDialog(
+            viewModel = viewModel,
             onDismiss = { showCreateSongDialog = false },
-            onSave = { title, artist, difficulty, description, notes ->
-                viewModel.addCustomSong(title, artist, difficulty, description, notes)
+            onSaveWithNotes = { title, artist, difficulty, description, aiNotes ->
+                viewModel.addCustomSongWithNotes(title, artist, difficulty, description, aiNotes)
             }
         )
     }
@@ -1074,15 +1076,20 @@ fun PracticeScreen(
                         Text(text = "Practice Track", color = GlowCyan, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
 
-                    // Microphone quick toggle key
-                    IconButton(
-                        onClick = { viewModel.toggleMicrophone(onRequestPermission) }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
-                            contentDescription = "Microphone toggle",
-                            tint = if (isListening) GlowCyan else GlowPink
-                        )
+                        // Microphone quick toggle key
+                        IconButton(
+                            onClick = { viewModel.toggleMicrophone(onRequestPermission) }
+                        ) {
+                            Icon(
+                                imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
+                                contentDescription = "Microphone toggle",
+                                tint = if (isListening) GlowCyan else GlowPink
+                            )
+                        }
                     }
                 }
 
@@ -1586,16 +1593,21 @@ fun PracticeScreen(
                             Text(text = "Practice Track", color = GlowCyan, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                         }
 
-                        IconButton(
-                            onClick = { viewModel.toggleMicrophone(onRequestPermission) },
-                            modifier = Modifier.size(32.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
-                                contentDescription = "Microphone toggle",
-                                tint = if (isListening) GlowCyan else GlowPink,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            IconButton(
+                                onClick = { viewModel.toggleMicrophone(onRequestPermission) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
+                                    contentDescription = "Microphone toggle",
+                                    tint = if (isListening) GlowCyan else GlowPink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
 
@@ -1794,168 +1806,175 @@ fun PracticeScreen(
                     }
                 }
             }
-
-            // RIGHT PANE (Scrolling Track & Helper Keyboard side-by-side or stacked on the rest of screen)
-            Column(
+              // RIGHT PANE (Scrolling Track & Helper Keyboard side-by-side or stacked on the rest of screen)
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 1. SCROLLING NOTES TRACK
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.48f)
-                        .padding(vertical = 4.dp)
-                ) {
-                    val widthDp = maxWidth
-                    val noteWidth = 100.dp
-                    val noteSpacing = 12.dp
-                    val sidePadding = (widthDp - noteWidth) / 2
-                    
-                    val density = androidx.compose.ui.platform.LocalDensity.current
-                    val scrollState = rememberScrollState()
-                    
-                    LaunchedEffect(activeNoteIndex) {
-                        if (activeNoteIndex >= 0) {
-                            val itemWidthPx = with(density) { (noteWidth + noteSpacing).toPx() }
-                            val targetPx = (activeNoteIndex * itemWidthPx).toInt()
-                            scrollState.animateScrollTo(targetPx)
-                        }
-                    }
-
-                    Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight()
-                                .background(ThemeSurface)
-                                .drawBehind {
-                                    val staffSpacing = 12.dp.toPx()
-                                    val centerY = size.height / 2
-                                    for (i in -2..2) {
-                                        val lineY = centerY + (i * staffSpacing)
-                                        drawLine(
-                                            color = DarkGrey.copy(alpha = 0.35f),
-                                            start = Offset(0f, lineY),
-                                            end = Offset(size.width, lineY),
-                                            strokeWidth = 1.2.dp.toPx()
-                                        )
-                                    }
-                                }
-                                .horizontalScroll(scrollState)
-                                .padding(horizontal = sidePadding),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(noteSpacing)
-                        ) {
-                            song.notes.forEachIndexed { index, songNote ->
-                                val isActive = index == activeNoteIndex
-                                val isPast = index < activeNoteIndex
-                                val evaluationResult = checkedNotes.getOrNull(index)
-
-                                NoteTrackItem(
-                                    note = songNote,
-                                    isActive = isActive,
-                                    isPast = isPast,
-                                    evaluationResult = evaluationResult
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 2. INTERACTIVE PIANO KEYBOARD
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.52f)
-                        .padding(bottom = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    val whiteKeys = listOf("C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5")
-                    
+                    // 1. SCROLLING NOTES TRACK
                     BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillMaxHeight()
-                            .padding(horizontal = 8.dp),
-                        contentAlignment = Alignment.TopStart
+                            .weight(0.48f)
+                            .padding(vertical = 4.dp)
                     ) {
-                        val totalWidth = maxWidth
-                        val whiteKeyWidth = totalWidth / 8
-                        val blackKeyWidth = whiteKeyWidth * 0.6f
+                        val widthDp = maxWidth
+                        val noteWidth = 100.dp
+                        val noteSpacing = 12.dp
+                        val sidePadding = (widthDp - noteWidth) / 2
+                        
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        val scrollState = rememberScrollState()
+                        
+                        LaunchedEffect(activeNoteIndex) {
+                            if (activeNoteIndex >= 0) {
+                                val itemWidthPx = with(density) { (noteWidth + noteSpacing).toPx() }
+                                val targetPx = (activeNoteIndex * itemWidthPx).toInt()
+                                scrollState.animateScrollTo(targetPx)
+                            }
+                        }
 
-                        // 1. White keys
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            whiteKeys.forEach { key ->
-                                val isExpected = song.notes.getOrNull(activeNoteIndex)?.pitch == key
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .padding(horizontal = 1.dp)
-                                        .background(
-                                            if (isExpected) GlowCyan.copy(alpha = 0.28f) else CleanWhite,
-                                            RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
-                                        )
-                                        .border(
-                                            if (isExpected) 2.dp else 1.dp,
-                                            if (isExpected) GlowCyan else SoftGrey,
-                                            RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
-                                        )
-                                        .clickable { viewModel.playSimulatedNote(key) }
-                                        .padding(bottom = 6.dp),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Text(
-                                        text = key,
-                                        color = if (isExpected) GlowCyan else Color.DarkGray,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Black
+                        Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight()
+                                    .background(ThemeSurface)
+                                    .drawBehind {
+                                        val staffSpacing = 12.dp.toPx()
+                                        val centerY = size.height / 2
+                                        for (i in -2..2) {
+                                            val lineY = centerY + (i * staffSpacing)
+                                            drawLine(
+                                                color = DarkGrey.copy(alpha = 0.35f),
+                                                start = Offset(0f, lineY),
+                                                end = Offset(size.width, lineY),
+                                                strokeWidth = 1.2.dp.toPx()
+                                            )
+                                        }
+                                    }
+                                    .horizontalScroll(scrollState)
+                                    .padding(horizontal = sidePadding),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(noteSpacing)
+                            ) {
+                                song.notes.forEachIndexed { index, songNote ->
+                                    val isActive = index == activeNoteIndex
+                                    val isPast = index < activeNoteIndex
+                                    val evaluationResult = checkedNotes.getOrNull(index)
+
+                                    NoteTrackItem(
+                                        note = songNote,
+                                        isActive = isActive,
+                                        isPast = isPast,
+                                        evaluationResult = evaluationResult
                                     )
                                 }
                             }
                         }
+                    }
 
-                        // 2. Black keys centered on White Key boundaries
-                        val blackKeyPitches = listOf("C#4", "D#4", "F#4", "G#4", "A#4")
-                        val blackKeyIndexes = listOf(1, 2, 4, 5, 6)
+                    // 2. INTERACTIVE PIANO KEYBOARD
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.52f)
+                            .padding(bottom = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        val whiteKeys = listOf("C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5")
+                        
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.TopStart
+                        ) {
+                            val totalWidth = maxWidth
+                            val whiteKeyWidth = totalWidth / 8
+                            val blackKeyWidth = whiteKeyWidth * 0.6f
 
-                        blackKeyPitches.forEachIndexed { idx, blackKey ->
-                            val boundaryIdx = blackKeyIndexes[idx]
-                            val isExpected = song.notes.getOrNull(activeNoteIndex)?.pitch == blackKey
-                            val xOffset = (whiteKeyWidth * boundaryIdx) - (blackKeyWidth / 2)
+                            // 1. White keys
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                whiteKeys.forEach { key ->
+                                    val isExpected = song.notes.getOrNull(activeNoteIndex)?.pitch == key
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .padding(horizontal = 1.dp)
+                                            .background(
+                                                if (isExpected) GlowCyan.copy(alpha = 0.28f) else CleanWhite,
+                                                RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
+                                            )
+                                            .border(
+                                                if (isExpected) 2.dp else 1.dp,
+                                                if (isExpected) GlowCyan else SoftGrey,
+                                                RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
+                                            )
+                                            .clickable { viewModel.playSimulatedNote(key) }
+                                            .padding(bottom = 6.dp),
+                                        contentAlignment = Alignment.BottomCenter
+                                    ) {
+                                        Text(
+                                            text = key,
+                                            color = if (isExpected) GlowCyan else Color.DarkGray,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                            }
 
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = xOffset)
-                                    .width(blackKeyWidth)
-                                    .fillMaxHeight(0.58f)
-                                    .background(
-                                        if (isExpected) GlowPurple.copy(alpha = 0.85f) else DarkGrey,
-                                        RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)
+                            // 2. Black keys centered on White Key boundaries
+                            val blackKeyPitches = listOf("C#4", "D#4", "F#4", "G#4", "A#4")
+                            val blackKeyIndexes = listOf(1, 2, 4, 5, 6)
+
+                            blackKeyPitches.forEachIndexed { idx, blackKey ->
+                                val boundaryIdx = blackKeyIndexes[idx]
+                                val isExpected = song.notes.getOrNull(activeNoteIndex)?.pitch == blackKey
+                                val xOffset = (whiteKeyWidth * boundaryIdx) - (blackKeyWidth / 2)
+
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = xOffset)
+                                        .width(blackKeyWidth)
+                                        .fillMaxHeight(0.58f)
+                                        .background(
+                                            if (isExpected) GlowPurple.copy(alpha = 0.85f) else DarkGrey,
+                                            RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)
+                                        )
+                                        .border(
+                                            if (isExpected) 2.dp else 1.dp,
+                                            if (isExpected) GlowCyan else Color.Black,
+                                            RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)
+                                        )
+                                        .clickable { viewModel.playSimulatedNote(blackKey) }
+                                        .padding(bottom = 2.dp),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Text(
+                                        text = blackKey.replace("4", ""),
+                                        color = CleanWhite,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
-                                    .border(
-                                        if (isExpected) 2.dp else 1.dp,
-                                        if (isExpected) GlowCyan else Color.Black,
-                                        RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)
-                                    )
-                                    .clickable { viewModel.playSimulatedNote(blackKey) }
-                                    .padding(bottom = 2.dp),
-                                contentAlignment = Alignment.BottomCenter
-                            ) {
-                                Text(
-                                    text = blackKey.replace("4", ""),
-                                    color = CleanWhite,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                }
                             }
                         }
                     }
                 }
+
             }
         }
     }
@@ -2413,23 +2432,196 @@ fun AuthProfileSection(
     }
 }
 
+private fun renderPdfToBitmap(context: android.content.Context, uri: android.net.Uri): android.graphics.Bitmap? {
+    try {
+        val parcelFileDescriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
+        val pdfRenderer = android.graphics.pdf.PdfRenderer(parcelFileDescriptor)
+        if (pdfRenderer.pageCount == 0) {
+            pdfRenderer.close()
+            parcelFileDescriptor.close()
+            return null
+        }
+        val page = pdfRenderer.openPage(0)
+        val scale = 1.8f
+        val width = (page.width * scale).toInt()
+        val height = (page.height * scale).toInt()
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        page.close()
+        pdfRenderer.close()
+        parcelFileDescriptor.close()
+        return bitmap
+    } catch (e: Exception) {
+        android.util.Log.e("KeySyncApp", "Error rendering PDF to Bitmap: ${e.message}", e)
+        return null
+    }
+}
+
 @Composable
 fun CreateSongDialog(
+    viewModel: KeySyncViewModel,
     onDismiss: () -> Unit,
-    onSave: (title: String, artist: String, difficulty: String, description: String, notes: String) -> Unit
+    onSaveWithNotes: (title: String, artist: String, difficulty: String, description: String, notes: List<com.example.api.AnalyzedNote>) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var artist by remember { mutableStateOf("") }
-    var difficulty by remember { mutableStateOf("Easy") }
-    var description by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("C4, E4, G4") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    val customApiKey by viewModel.customApiKey.collectAsStateWithLifecycle()
+    var apiKeyInput by remember(customApiKey) { mutableStateOf(customApiKey) }
+
+    // AI upload states
+    val context = LocalContext.current
+    val aiAnalyzing by viewModel.aiAnalyzing.collectAsStateWithLifecycle()
+    var selectedUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var uploadStatusMessage by remember { mutableStateOf<String?>(null) }
+
+    val documentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            selectedUri = uri
+            errorMsg = null
+            
+            val contentResolver = context.contentResolver
+            val mimeType = contentResolver.getType(uri)
+            
+            var fileName = "imported_track"
+            try {
+                val cursor = contentResolver.query(uri, null, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            fileName = it.getString(nameIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CreateSongDialog", "Error getting display name", e)
+            }
+
+            val isPdf = mimeType?.contains("pdf", ignoreCase = true) == true || fileName.endsWith(".pdf", ignoreCase = true)
+            val isMidi = mimeType?.contains("midi", ignoreCase = true) == true || 
+                         mimeType?.contains("mid", ignoreCase = true) == true ||
+                         fileName.endsWith(".mid", ignoreCase = true) || 
+                         fileName.endsWith(".midi", ignoreCase = true)
+
+            if (isMidi) {
+                uploadStatusMessage = "Parsing MIDI file notes and lyrics..."
+                try {
+                    val inputStream = contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        viewModel.importMidiFile(
+                            inputStream = inputStream,
+                            fileName = fileName,
+                            onSuccess = { result ->
+                                onSaveWithNotes(
+                                    result.title,
+                                    result.artist,
+                                    result.difficulty,
+                                    result.description,
+                                    result.notes
+                                )
+                                onDismiss()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "MIDI Track '${result.title}' imported successfully with ${result.notes.size} notes!",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            },
+                            onError = { err ->
+                                errorMsg = err
+                                uploadStatusMessage = null
+                            }
+                        )
+                    } else {
+                        errorMsg = "Unable to read MIDI file."
+                        uploadStatusMessage = null
+                    }
+                } catch (e: Exception) {
+                    errorMsg = "Error: ${e.message}"
+                    uploadStatusMessage = null
+                }
+            } else if (isPdf) {
+                uploadStatusMessage = "Rendering PDF page and transcribing with Gemini AI..."
+                try {
+                    val bitmap = renderPdfToBitmap(context, uri)
+                    if (bitmap != null) {
+                        viewModel.importSheetMusic(
+                            bitmap = bitmap,
+                            onSuccess = { result ->
+                                onSaveWithNotes(
+                                    result.title,
+                                    result.artist,
+                                    result.difficulty,
+                                    result.description,
+                                    result.notes
+                                )
+                                onDismiss()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "PDF Track '${result.title}' transcribed successfully with ${result.notes.size} notes!",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            },
+                            onError = { err ->
+                                errorMsg = err
+                                uploadStatusMessage = null
+                            }
+                        )
+                    } else {
+                        errorMsg = "Failed to render PDF to image."
+                        uploadStatusMessage = null
+                    }
+                } catch (e: Exception) {
+                    errorMsg = "Error: ${e.message}"
+                    uploadStatusMessage = null
+                }
+            } else {
+                uploadStatusMessage = "Analyzing sheet music image with Gemini AI..."
+                try {
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                    if (bitmap != null) {
+                        viewModel.importSheetMusic(
+                            bitmap = bitmap,
+                            onSuccess = { result ->
+                                onSaveWithNotes(
+                                    result.title,
+                                    result.artist,
+                                    result.difficulty,
+                                    result.description,
+                                    result.notes
+                                )
+                                onDismiss()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Lesson '${result.title}' created successfully with ${result.notes.size} notes!",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            },
+                            onError = { err ->
+                                errorMsg = err
+                                uploadStatusMessage = null
+                            }
+                        )
+                    } else {
+                        errorMsg = "Unable to load selected image."
+                        uploadStatusMessage = null
+                    }
+                } catch (e: Exception) {
+                    errorMsg = "Error: ${e.message}"
+                    uploadStatusMessage = null
+                }
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Create Custom Piano Track",
+                text = "Add Practice Track",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = CleanWhite
@@ -2440,105 +2632,81 @@ fun CreateSongDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it; errorMsg = null },
-                    label = { Text("Song Title*", color = SoftGrey) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowCyan,
-                        focusedLabelColor = GlowCyan,
-                        unfocusedBorderColor = DarkGrey,
-                        focusedTextColor = CleanWhite,
-                        unfocusedTextColor = CleanWhite
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("custom_song_title_input")
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Upload sheet music (Image/PDF) or a MIDI file. Gemini AI scans sheet music to transcribe note pitches and map lyrics, while MIDI files are parsed natively and instantly!",
+                        color = SoftGrey,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
 
-                OutlinedTextField(
-                    value = artist,
-                    onValueChange = { artist = it },
-                    label = { Text("Artist (Optional)", color = SoftGrey) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowCyan,
-                        focusedLabelColor = GlowCyan,
-                        unfocusedBorderColor = DarkGrey,
-                        focusedTextColor = CleanWhite,
-                        unfocusedTextColor = CleanWhite
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Column {
-                    Text("Difficulty Level", fontSize = 12.sp, color = SoftGrey, fontWeight = FontWeight.Bold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ThemeDarkBg)
+                            .border(
+                                width = 1.dp,
+                                color = if (selectedUri != null) GlowPurple else DarkGrey,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { if (!aiAnalyzing) documentPicker.launch("*/*") }
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        listOf("Easy", "Medium", "Hard").forEach { diff ->
-                            val isSelected = difficulty == diff
-                            val dColor = when (diff) {
-                                "Easy" -> Color(0xFF4ADE80)
-                                "Medium" -> GlowPurple
-                                else -> GlowPink
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) dColor.copy(alpha = 0.15f) else ThemeSurface)
-                                    .border(1.dp, if (isSelected) dColor else DarkGrey, RoundedCornerShape(8.dp))
-                                    .clickable { difficulty = diff }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
+                        if (aiAnalyzing) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = GlowPurple, modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = diff,
-                                    color = if (isSelected) dColor else SoftGrey,
-                                    fontSize = 12.sp,
+                                    text = "Processing practice track...",
+                                    color = CleanWhite,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = if (selectedUri != null) Icons.Default.CheckCircle else Icons.Default.CloudUpload,
+                                    contentDescription = "Upload Practice Track",
+                                    tint = if (selectedUri != null) GlowPurple else SoftGrey,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (selectedUri != null) "Select Different File" else "Select Sheet Music / MIDI File",
+                                    color = CleanWhite,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Supports Image, PDF or MIDI files",
+                                    color = SoftGrey,
+                                    fontSize = 11.sp
                                 )
                             }
                         }
                     }
-                }
 
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it; errorMsg = null },
-                    label = { Text("Note Pitches (comma separated)*", color = SoftGrey) },
-                    placeholder = { Text("e.g., C4, E4, G4, C5", color = SoftGrey) },
-                    supportingText = {
+                    if (uploadStatusMessage != null && !aiAnalyzing) {
                         Text(
-                            text = "Standard Piano Pitches from C4 to B5 are supported. e.g. C4, D4, E4, F4, G4, A4, B4, C5.",
-                            fontSize = 10.sp,
-                            color = SoftGrey
+                            text = uploadStatusMessage!!,
+                            color = GlowPurple,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowCyan,
-                        focusedLabelColor = GlowCyan,
-                        unfocusedBorderColor = DarkGrey,
-                        focusedTextColor = CleanWhite,
-                        unfocusedTextColor = CleanWhite
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("custom_song_notes_input")
-                )
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Brief Description / Tip", color = SoftGrey) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowCyan,
-                        focusedLabelColor = GlowCyan,
-                        unfocusedBorderColor = DarkGrey,
-                        focusedTextColor = CleanWhite,
-                        unfocusedTextColor = CleanWhite
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+                }
 
                 if (errorMsg != null) {
                     Text(
@@ -2548,28 +2716,81 @@ fun CreateSongDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
+
+                // Custom API Key Override input configuration
+                var showApiKeyField by remember { mutableStateOf(customApiKey.isNotEmpty() || errorMsg != null) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showApiKeyField = !showApiKeyField }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.VpnKey,
+                                contentDescription = "API Key",
+                                tint = GlowPurple,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Gemini API Key Override (Optional)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CleanWhite
+                            )
+                        }
+                        Text(
+                            text = if (showApiKeyField) "Hide" else "Configure/Show Key",
+                            fontSize = 11.sp,
+                            color = GlowCyan,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (showApiKeyField) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = apiKeyInput,
+                            onValueChange = { newValue ->
+                                apiKeyInput = newValue
+                                viewModel.saveCustomApiKey(newValue)
+                            },
+                            placeholder = { Text("Enter Gemini API Key (AIzaSy...)", fontSize = 12.sp) },
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GlowPurple,
+                                unfocusedBorderColor = DarkGrey,
+                                focusedTextColor = CleanWhite,
+                                unfocusedTextColor = CleanWhite,
+                                focusedPlaceholderColor = SoftGrey,
+                                unfocusedPlaceholderColor = SoftGrey
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Get a free key from Google AI Studio (https://aistudio.google.com). Paste it here to bypass any platform environment key sync issues.",
+                            fontSize = 10.sp,
+                            color = SoftGrey,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (title.trim().isEmpty()) {
-                        errorMsg = "Please enter a song title"
-                        return@Button
-                    }
-                    if (notes.trim().isEmpty()) {
-                        errorMsg = "Please enter pitch notes"
-                        return@Button
-                    }
-                    onSave(title.trim(), artist.trim(), difficulty, description.trim(), notes.trim())
-                    onDismiss()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = GlowCyan),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.testTag("save_custom_song_confirm")
-            ) {
-                Text("Save Track", color = ThemeDarkBg, fontWeight = FontWeight.Bold)
-            }
+            // Confirm button is not needed as uploading/analyzing automatically processes and saves
         },
         dismissButton = {
             TextButton(
@@ -2802,3 +3023,4 @@ fun LoginScreen(viewModel: KeySyncViewModel) {
         }
     }
 }
+
